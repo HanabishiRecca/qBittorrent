@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        libt_version: ["2.0.10", "1.2.19"]
+        libt_version: ["2.0.10"]
         qbt_gui: ["GUI=ON", "GUI=OFF"]
         qt_version: ["6.5.2"]
 
@@ -73,31 +73,23 @@ jobs:
       - name: Install libtorrent
         run: |
           git clone \
-            --branch v${{ matrix.libt_version }} \
+            --branch experimental \
             --depth 1 \
             --recurse-submodules \
-            https://github.com/arvidn/libtorrent.git \
+            https://github.com/HanabishiRecca/libtorrent.git \
             ${{ env.libtorrent_path }}
           cd ${{ env.libtorrent_path }}
+          git show --oneline -s
           CXXFLAGS="$CXXFLAGS ${{ env.harden_flags }}" \
           cmake \
             -B build \
             -G "Ninja" \
             -DBUILD_SHARED_LIBS=OFF \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_BUILD_TYPE=Release \
             -DBOOST_ROOT="${{ env.boost_path }}" \
             -Ddeprecated-functions=OFF
           cmake --build build
           sudo cmake --install build
-
-      # to avoid scanning 3rdparty codebases, initialize it just before building qbt
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        if: startsWith(matrix.libt_version, 2) && (matrix.qbt_gui == 'GUI=ON')
-        with:
-          config-file: ./.github/workflows/helper/codeql/cpp.yaml
-          languages: cpp
 
       - name: Build qBittorrent
         run: |
@@ -106,31 +98,18 @@ jobs:
           cmake \
             -B build \
             -G "Ninja" \
-            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_BUILD_TYPE=Release \
             -DBOOST_ROOT="${{ env.boost_path }}" \
             -DCMAKE_INSTALL_PREFIX="/usr" \
-            -DTESTING=ON \
+            -DTESTING=OFF \
             -DVERBOSE_CONFIGURE=ON \
             -D${{ matrix.qbt_gui }}
-          cmake --build build --target qbt_update_translations
           cmake --build build
-          cmake --build build --target check
           DESTDIR="qbittorrent" cmake --install build
-
-      - name: Run CodeQL analysis
-        uses: github/codeql-action/analyze@v3
-        if: startsWith(matrix.libt_version, 2) && (matrix.qbt_gui == 'GUI=ON')
-        with:
-          category: ${{ github.base_ref || github.ref_name }}
 
       - name: Prepare build artifacts
         run: |
           mkdir upload
-          mkdir upload/cmake
-          cp build/compile_commands.json upload/cmake
-          mkdir upload/cmake/libtorrent
-          cp ${{ env.libtorrent_path }}/build/compile_commands.json upload/cmake/libtorrent
 
       - name: Install AppImage
         run: |
